@@ -1,0 +1,16 @@
+{
+  "name": "bot-ofertas",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "coletar": "node coletar.mjs",
+    "painel": "node painel.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
+}

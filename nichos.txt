@@ -1,0 +1,5 @@
+# Uma palavra-chave por linha. Linhas com # são ignoradas.
+emagrecer
+renda extra
+curso online
+frete grátis

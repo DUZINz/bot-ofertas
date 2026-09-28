@@ -39,13 +39,21 @@ O uso tem duas partes: o **coletor** busca os dados e o **painel** mostra os res
 Edite o arquivo [`nichos.txt`](nichos.txt) e coloque uma palavra-chave por linha. Linhas que começam com `#` são ignoradas.
 
 ```text
-# Uma palavra-chave por linha. Linhas com # são ignoradas.
+# Saúde, corpo e beleza
 emagrecer
-renda extra
-curso online
+desafio 21 dias
+
+# Sinais de loja / drop
+últimas unidades
 ```
 
-> **Dica:** termos genéricos como "renda extra" trazem empresas grandes (bancos, maquininhas). Para infoproduto, termos mais específicos funcionam melhor: "método comprovado", "aula gratuita", "desafio 21 dias".
+O arquivo já vem com 21 nichos agrupados por tema:
+- 16 testados na Biblioteca: saúde e beleza, dinheiro e carreira, relacionamento, sinais de infoproduto e sinais de loja/drop;
+- 5 que saíram da pesquisa sobre os nichos mais escalados do Brasil: prosperidade, dores nas articulações, glicose alta, desempenho masculino e ChatGPT. A pesquisa completa está em [`reports/Nichos mais escalados no Brasil.md`](reports/Nichos%20mais%20escalados%20no%20Brasil.md).
+
+> **Cuidado com os nichos de saúde (glicose, dores, desempenho masculino):** um levantamento do NetLab/UFRJ classificou 76% de uma amostra de anúncios de saúde na Meta como fraude. Nesses nichos, muitos anúncios não significam, por si só, uma oferta legítima.
+
+> **Dica:** antes de adicionar um termo, pesquise na [Biblioteca de Anúncios](https://www.facebook.com/ads/library/) e veja quem aparece. Termos genéricos como "frete grátis" ou "curso online" trazem marketplace e faculdade. Frases que só infoprodutor usa, como "aula gratuita", "acesso vitalício" e "método comprovado", trazem as ofertas que interessam. Os termos que testamos e descartamos ficam comentados no fim do arquivo.
 
 ### 2. Rode a coleta
 
@@ -209,6 +217,7 @@ O banco tem duas tabelas:
 | `Executable doesn't exist` ao coletar | Falta o navegador do Playwright: `npx playwright install chromium` |
 | `nenhum anúncio (bloqueio ou a Meta mudou o layout?)` | A Meta pode ter limitado o acesso. Espere algumas horas e diminua `MAX_PAGINAS`. Se continuar, a estrutura da página mudou e o coletor precisa de ajuste |
 | `sem contagem, pulando` | Aquela página não carregou a tempo. É normal acontecer de vez em quando |
+| `A Meta parou de devolver dados... Coleta interrompida` | A Meta bloqueou o acesso por um tempo. O coletor para sozinho depois de 3 acessos vazios seguidos, pra não piorar o bloqueio. Espere algumas horas antes de rodar de novo, e **nunca rode duas coletas ao mesmo tempo**: dobrar o ritmo de acessos é o jeito mais rápido de ser bloqueado |
 | `falha ao abrir ... net::ERR_...` | Queda de internet ou timeout naquela página. A coleta registra e segue com as próximas |
 | Tarefa agendada aparece como falha | Nenhuma página foi medida (sem internet ou bloqueio). Veja o motivo no `coleta.log` |
 | Miniatura mostra só uma letra | O link da imagem expirou (o CDN da Meta renova em poucos dias) ou a página foi coletada numa versão antiga. A próxima coleta resolve |

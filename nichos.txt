@@ -1,5 +1,54 @@
 # Uma palavra-chave por linha. Linhas com # são ignoradas.
+# Cada nicho leva uns 3 minutos na coleta (21 nichos ≈ 1h05). Comente com # o que não interessar.
+# Termos testados na Biblioteca de Anúncios em 28/09/2026: os ativos trazem infoprodutores e lojas pequenas.
+
+# Top 5 da pesquisa de nichos escalados (reports/Nichos mais escalados no Brasil.md).
+# Ainda não validados na Biblioteca: a primeira coleta mostra quem aparece. Reservas entre parênteses.
+prosperidade
+# (mapa astral, conexão com Deus, devocional)
+dores nas articulações
+# (dor no joelho, saúde articular, dor crônica)
+glicose alta
+# (glicemia, controlar a glicose)
+desempenho masculino
+# (próstata, homens acima de 40) — nicho com maior risco de remoção pela política da Meta
+ChatGPT
+# (agente de IA, curso de IA)
+
+# Saúde, corpo e beleza
 emagrecer
+desafio 21 dias
+manchas no rosto
+queda de cabelo
+
+# Dinheiro e carreira
 renda extra
-curso online
-frete grátis
+ganhar dinheiro na internet
+sair das dívidas
+concurso público
+inglês fluente
+curso de confeitaria
+
+# Relacionamento
+reconquistar
+
+# Sinais de infoproduto (aparecem em qualquer nicho)
+aula gratuita
+método comprovado
+acesso vitalício
+
+# Sinais de loja / drop
+últimas unidades
+garantia de 7 dias
+
+# Sugestões da pesquisa para testar (tire o # para ativar)
+# ozempic natural
+# pagamento na entrega
+
+# Testados e fracos: trazem banco, faculdade, operadora ou marketplace no lugar de oferta
+# curso online
+# frete grátis
+# ansiedade
+# compre 2 leve 3
+# oferta relâmpago
+# loja oficial

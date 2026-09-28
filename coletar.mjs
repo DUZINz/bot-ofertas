@@ -38,6 +38,10 @@ page.on('response', async r => {
   parse((await r.text().catch(() => '')).split('\n'), alvo);
 });
 
+// Vários acessos seguidos sem nenhum dado = a Meta está bloqueando; insistir só prolonga o bloqueio.
+let vazias = 0;
+const bloqueado = () => vazias >= 3;
+
 async function abrir(url, rolagens = 0) {
   const out = atual = { ads: [], total: null };
   try {
@@ -50,6 +54,7 @@ async function abrir(url, rolagens = 0) {
   } catch (e) { // rede caiu, timeout...: registra e segue, uma página ruim não derruba a coleta
     console.log(`  falha ao abrir ${url}: ${e.message.split('\n')[0]}`);
   }
+  vazias = out.ads.length || out.total != null ? 0 : vazias + 1;
   return out;
 }
 
@@ -71,8 +76,9 @@ function salvar(ads, nicho) {
 const medidas = new Set();
 const t0 = Date.now();
 try {
-  for (const nicho of nichos) {
+  varredura: for (const nicho of nichos) {
     const { ads, total } = await abrir(`${BASE}&search_type=keyword_unordered&q=${encodeURIComponent(nicho)}`, ROLAGENS);
+    if (bloqueado()) break;
     if (!ads.length) { console.log(`${nicho}: nenhum anúncio (bloqueio ou a Meta mudou o layout?)`); continue; }
     salvar(ads, nicho);
 
@@ -84,6 +90,7 @@ try {
 
     for (const id of paginas) {
       const r = await abrir(`${BASE}&search_type=page&view_all_page_id=${encodeURIComponent(id)}`);
+      if (bloqueado()) break varredura;
       if (r.total == null) { console.log(`  ${id}: sem contagem, pulando`); continue; }
       salvar(r.ads, nicho);
       salvaMedicao.run(id, hoje, r.total);
@@ -94,5 +101,6 @@ try {
 } finally {
   await browser.close();
 }
+if (bloqueado()) console.log('A Meta parou de devolver dados (3 acessos seguidos vazios). Coleta interrompida pra não prolongar o bloqueio: tente de novo em algumas horas.');
 console.log(`${new Date().toLocaleString('pt-BR')} · fim: ${medidas.size} páginas medidas em ${Math.round((Date.now() - t0) / 60000)} min`);
-if (!medidas.size) process.exitCode = 1; // o agendador registra como falha
+if (!medidas.size || bloqueado()) process.exitCode = 1; // o agendador registra como falha

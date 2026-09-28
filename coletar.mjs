@@ -2,8 +2,8 @@
 // Uso: npm run coletar                 (palavras de nichos.txt)
 //      node coletar.mjs "renda extra"  (palavras avulsas)
 import { chromium } from 'playwright';
-import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
+import { db } from './banco.mjs';
 
 const ROLAGENS = 10;    // ~10 anúncios por rolagem na busca por palavra
 const MAX_PAGINAS = 40; // ponytail: páginas medidas por nicho (1 acesso cada); subir se a Meta não bloquear
@@ -13,13 +13,8 @@ const nichos = process.argv.length > 2 ? process.argv.slice(2)
   : fs.readFileSync('nichos.txt', 'utf8').split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
 const hoje = new Date().toLocaleDateString('sv'); // AAAA-MM-DD no fuso local
 
-const db = new DatabaseSync('ofertas.db');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS anuncios (ad_id TEXT PRIMARY KEY, page_id TEXT, page_name TEXT, nicho TEXT,
-    inicio INTEGER, copias INTEGER, link TEXT, dominio TEXT, texto TEXT, visto_em TEXT);
-  CREATE TABLE IF NOT EXISTS medicoes (page_id TEXT, dia TEXT, ativos INTEGER, PRIMARY KEY (page_id, dia));
-`);
-const salvaAnuncio = db.prepare('INSERT OR REPLACE INTO anuncios VALUES (?,?,?,?,?,?,?,?,?,?)');
+const salvaAnuncio = db.prepare(`INSERT OR REPLACE INTO anuncios
+  (ad_id, page_id, page_name, nicho, inicio, copias, link, dominio, texto, visto_em, imagem) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
 const salvaMedicao = db.prepare('INSERT OR REPLACE INTO medicoes VALUES (?,?,?)');
 
 // Os anúncios vêm em JSON aninhado, tanto no HTML inicial quanto nas respostas do /api/graphql ao rolar.
@@ -61,8 +56,11 @@ function salvar(ads, nicho) {
     try { dominio = new URL(s.link_url).hostname.replace(/^www\./, ''); } catch {}
     // anúncio de catálogo vem com texto modelo tipo {{product.brand}}; cai pro texto do card
     const texto = [s.body?.text, s.cards?.[0]?.body, s.title].find(t => t && !t.includes('{{')) ?? '';
+    // ponytail: URL assinada do CDN da Meta, expira em dias; a coleta diária renova
+    const imagem = s.images?.[0]?.resized_image_url ?? s.videos?.[0]?.video_preview_image_url
+      ?? s.cards?.[0]?.resized_image_url ?? s.cards?.[0]?.video_preview_image_url ?? null;
     salvaAnuncio.run(a.ad_archive_id, a.page_id, a.page_name ?? s.page_name ?? null, nicho, a.start_date ?? null,
-      a.collation_count ?? 1, s.link_url ?? null, dominio, texto.slice(0, 500), hoje);
+      a.collation_count ?? 1, s.link_url ?? null, dominio, texto.slice(0, 500), hoje, imagem);
   }
 }
 

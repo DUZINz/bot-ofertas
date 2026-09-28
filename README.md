@@ -97,6 +97,8 @@ $env:PORT=3001; npm run painel
 
 O painel lê o banco a cada recarregamento. Depois de uma coleta nova, basta apertar `F5`.
 
+Ele só responde no próprio computador (`localhost`): outros aparelhos da rede e sites de fora não conseguem acessar.
+
 ---
 
 ## Lendo o painel
@@ -123,6 +125,8 @@ Clicar num cartão filtra a lista.
 | **No ar** | Idade do anúncio mais antigo ainda ativo |
 
 Clique no título de uma coluna para ordenar por ela.
+
+A lista traz as páginas medidas na **última semana de coletas**. Uma página que saiu das buscas some da lista em vez de ficar parada com um número velho; o histórico dela continua no banco. A lista mostra 200 linhas por vez, e o botão **Mostrar mais** no fim carrega as próximas.
 
 ### Dossiê da oferta
 
@@ -205,6 +209,8 @@ O banco tem duas tabelas:
 | `Executable doesn't exist` ao coletar | Falta o navegador do Playwright: `npx playwright install chromium` |
 | `nenhum anúncio (bloqueio ou a Meta mudou o layout?)` | A Meta pode ter limitado o acesso. Espere algumas horas e diminua `MAX_PAGINAS`. Se continuar, a estrutura da página mudou e o coletor precisa de ajuste |
 | `sem contagem, pulando` | Aquela página não carregou a tempo. É normal acontecer de vez em quando |
+| `falha ao abrir ... net::ERR_...` | Queda de internet ou timeout naquela página. A coleta registra e segue com as próximas |
+| Tarefa agendada aparece como falha | Nenhuma página foi medida (sem internet ou bloqueio). Veja o motivo no `coleta.log` |
 | Miniatura mostra só uma letra | O link da imagem expirou (o CDN da Meta renova em poucos dias) ou a página foi coletada numa versão antiga. A próxima coleta resolve |
 | Tendência mostra "1ª leitura" | Só existe uma coleta daquela página. Espere a coleta do dia seguinte |
 

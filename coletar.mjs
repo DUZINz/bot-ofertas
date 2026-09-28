@@ -10,7 +10,7 @@ const MAX_PAGINAS = 40; // ponytail: páginas medidas por nicho (1 acesso cada);
 const BASE = 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=BR&media_type=all';
 
 const nichos = process.argv.length > 2 ? process.argv.slice(2)
-  : fs.readFileSync('nichos.txt', 'utf8').split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+  : fs.readFileSync(new URL('nichos.txt', import.meta.url), 'utf8').split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
 const hoje = new Date().toLocaleDateString('sv'); // AAAA-MM-DD no fuso local
 
 const salvaAnuncio = db.prepare(`INSERT OR REPLACE INTO anuncios
@@ -40,12 +40,16 @@ page.on('response', async r => {
 
 async function abrir(url, rolagens = 0) {
   const out = atual = { ads: [], total: null };
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => document.documentElement.innerHTML.includes('search_results_connection'),
-    null, { timeout: 20000, polling: 500 }).catch(() => {});
-  parse(scriptsJson(await page.content()), out);
-  for (let i = 0; i < rolagens; i++) { await page.mouse.wheel(0, 20000); await page.waitForTimeout(2500); }
-  await page.waitForTimeout(1000 + Math.random() * 2000); // respiro pra não tomar bloqueio
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.documentElement.innerHTML.includes('search_results_connection'),
+      null, { timeout: 20000, polling: 500 }).catch(() => {});
+    parse(scriptsJson(await page.content()), out);
+    for (let i = 0; i < rolagens; i++) { await page.mouse.wheel(0, 20000); await page.waitForTimeout(2500); }
+    await page.waitForTimeout(1000 + Math.random() * 2000); // respiro pra não tomar bloqueio
+  } catch (e) { // rede caiu, timeout...: registra e segue, uma página ruim não derruba a coleta
+    console.log(`  falha ao abrir ${url}: ${e.message.split('\n')[0]}`);
+  }
   return out;
 }
 
@@ -65,24 +69,30 @@ function salvar(ads, nicho) {
 }
 
 const medidas = new Set();
-for (const nicho of nichos) {
-  const { ads, total } = await abrir(`${BASE}&search_type=keyword_unordered&q=${encodeURIComponent(nicho)}`, ROLAGENS);
-  if (!ads.length) { console.log(`${nicho}: nenhum anúncio (bloqueio ou a Meta mudou o layout?)`); continue; }
-  salvar(ads, nicho);
+const t0 = Date.now();
+try {
+  for (const nicho of nichos) {
+    const { ads, total } = await abrir(`${BASE}&search_type=keyword_unordered&q=${encodeURIComponent(nicho)}`, ROLAGENS);
+    if (!ads.length) { console.log(`${nicho}: nenhum anúncio (bloqueio ou a Meta mudou o layout?)`); continue; }
+    salvar(ads, nicho);
 
-  // Mede primeiro as páginas que mais duplicaram criativo na amostra.
-  const peso = {};
-  for (const a of ads) peso[a.page_id] = (peso[a.page_id] ?? 0) + (a.collation_count ?? 1);
-  const paginas = Object.keys(peso).filter(id => !medidas.has(id)).sort((x, y) => peso[y] - peso[x]).slice(0, MAX_PAGINAS);
-  console.log(`${nicho}: ${ads.length} anúncios na amostra (${total ?? '?'} no total), medindo ${paginas.length} páginas`);
+    // Mede primeiro as páginas que mais duplicaram criativo na amostra.
+    const peso = {};
+    for (const a of ads) peso[a.page_id] = (peso[a.page_id] ?? 0) + (a.collation_count ?? 1);
+    const paginas = Object.keys(peso).filter(id => !medidas.has(id)).sort((x, y) => peso[y] - peso[x]).slice(0, MAX_PAGINAS);
+    console.log(`${nicho}: ${ads.length} anúncios na amostra (${total ?? '?'} no total), medindo ${paginas.length} páginas`);
 
-  for (const id of paginas) {
-    const r = await abrir(`${BASE}&search_type=page&view_all_page_id=${id}`);
-    if (r.total == null) { console.log(`  ${id}: sem contagem, pulando`); continue; }
-    salvar(r.ads, nicho);
-    salvaMedicao.run(id, hoje, r.total);
-    medidas.add(id);
-    console.log(`  ${r.ads[0]?.page_name ?? id}: ${r.total} ativos`);
+    for (const id of paginas) {
+      const r = await abrir(`${BASE}&search_type=page&view_all_page_id=${encodeURIComponent(id)}`);
+      if (r.total == null) { console.log(`  ${id}: sem contagem, pulando`); continue; }
+      salvar(r.ads, nicho);
+      salvaMedicao.run(id, hoje, r.total);
+      medidas.add(id);
+      console.log(`  ${r.ads[0]?.page_name ?? id}: ${r.total} ativos`);
+    }
   }
+} finally {
+  await browser.close();
 }
-await browser.close();
+console.log(`${new Date().toLocaleString('pt-BR')} · fim: ${medidas.size} páginas medidas em ${Math.round((Date.now() - t0) / 60000)} min`);
+if (!medidas.size) process.exitCode = 1; // o agendador registra como falha

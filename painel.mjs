@@ -1,11 +1,13 @@
 // Painel das ofertas: npm run painel → http://localhost:3000  (outra porta: PORT=3001 npm run painel)
 import http from 'node:http';
+import { randomBytes } from 'node:crypto';
 import { db } from './banco.mjs';
 
 const PORTA = process.env.PORT || 3000;
 
-// Uma linha por página, na última medição. Com um único MIN(), o SQLite pega as colunas soltas
-// (link, texto, imagem...) da mesma linha do anúncio mais antigo — o criativo que mais se provou.
+// Uma linha por página medida na última semana de coletas (página que sumiu da amostra não fica com número velho).
+// Com um único MIN(), o SQLite pega as colunas soltas (link, texto, imagem...) da mesma linha do anúncio
+// mais antigo — o criativo que mais se provou.
 const ofertas = db.prepare(`
   SELECT m.page_id, a.page_name, a.nicho, m.ativos, m.dia,
     m.ativos - (SELECT o.ativos FROM medicoes o WHERE o.page_id = m.page_id
@@ -13,10 +15,16 @@ const ofertas = db.prepare(`
     MIN(a.inicio) AS inicio, a.dominio, a.link, a.texto, a.ad_id, a.imagem
   FROM medicoes m
   JOIN anuncios a ON a.page_id = m.page_id AND a.visto_em = m.dia
-  WHERE m.dia = (SELECT MAX(dia) FROM medicoes WHERE page_id = m.page_id)
+  WHERE m.dia >= date((SELECT MAX(dia) FROM medicoes), '-7 day')
+    AND m.dia = (SELECT MAX(dia) FROM medicoes WHERE page_id = m.page_id)
   GROUP BY m.page_id
 `);
-const historico = db.prepare(`SELECT page_id, dia, ativos FROM medicoes WHERE dia >= date('now', 'localtime', '-30 day') ORDER BY dia`);
+const historico = db.prepare(`
+  SELECT page_id, dia, ativos FROM medicoes
+  WHERE dia >= date((SELECT MAX(dia) FROM medicoes), '-30 day')
+    AND page_id IN (SELECT page_id FROM medicoes WHERE dia >= date((SELECT MAX(dia) FROM medicoes), '-7 day'))
+  ORDER BY dia
+`);
 const ultimaColeta = db.prepare('SELECT MAX(dia) AS dia FROM medicoes');
 
 function dados() {
@@ -186,7 +194,15 @@ tr:hover .thumb { border-color:rgba(34,211,238,.6); box-shadow:0 0 18px rgba(34,
 .icone-btn { all:unset; display:inline-grid; place-items:center; width:30px; height:30px; border-radius:6px; cursor:pointer; color:var(--tinta-3); border:1px solid transparent; transition:.15s; }
 .icone-btn:hover, tr:hover .icone-btn { color:var(--ciano); border-color:rgba(34,211,238,.4); background:rgba(34,211,238,.08); }
 .icone-btn:focus-visible { outline:2px solid var(--ciano); outline-offset:2px; }
-.nada { padding:56px 16px; text-align:center; font:12px var(--mono); letter-spacing:.06em; color:var(--tinta-2); cursor:default; }
+.nada { padding:56px 16px; text-align:center; font:12px var(--mono); letter-spacing:.06em; color:var(--tinta-2); }
+tbody tr.fixa { cursor:default; }
+tbody tr.fixa:hover { background:none; }
+tbody tr.fixa:hover td:first-child { box-shadow:none; }
+.mais { padding:16px; text-align:center; }
+.mais button { all:unset; cursor:pointer; padding:8px 16px; border-radius:6px; border:1px solid rgba(34,211,238,.4);
+  font:600 11px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--ciano); }
+.mais button:hover { background:rgba(34,211,238,.08); }
+.mais button:focus-visible { outline:2px solid var(--ciano); outline-offset:2px; }
 .rodape { margin:18px 0 0; font:11px var(--mono); letter-spacing:.04em; color:var(--tinta-3); }
 
 /* ── gráficos ── */
@@ -299,7 +315,7 @@ tr:hover .thumb { border-color:rgba(34,211,238,.6); box-shadow:0 0 18px rgba(34,
 </aside>
 <div id="dica" role="tooltip"></div>
 
-<script>
+<script nonce="__NONCE__">
 const { ofertas: DADOS, hist: HIST, ultima: ULTIMA } = __DADOS__;
 const REDES = /instagram|whatsapp|wa\\.me|facebook|fb\\.me|mercadolivre|shopee|amazon|magazineluiza|play\\.google|apple\\.com/;
 const REDUZIDO = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -316,8 +332,8 @@ const diaBR = d => d.split('-').reverse().join('/');
 const diaCurto = d => d.slice(8, 10) + '/' + d.slice(5, 7);
 const data = (ts, op) => new Date(ts * 1000).toLocaleDateString('pt-BR', op);
 const seguro = u => typeof u === 'string' && /^https?:\\/\\//.test(u);
-const libPagina = r => 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=BR&search_type=page&view_all_page_id=' + r.page_id;
-const libAnuncio = r => 'https://www.facebook.com/ads/library/?id=' + r.ad_id;
+const libPagina = r => 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=BR&search_type=page&view_all_page_id=' + encodeURIComponent(r.page_id);
+const libAnuncio = r => 'https://www.facebook.com/ads/library/?id=' + encodeURIComponent(r.ad_id);
 function svg(html) { const t = document.createElement('template'); t.innerHTML = html; return t.content.firstChild; } // só constantes e números, nunca texto de anúncio
 function el(tag, props = {}, ...filhos) {
   const e = document.createElement(tag);
@@ -326,14 +342,15 @@ function el(tag, props = {}, ...filhos) {
   return e;
 }
 
-const agora = Date.now() / 1000;
 for (const r of DADOS) {
-  r.dias = r.inicio ? Math.max(0, Math.floor((agora - r.inicio) / 86400)) : 0;
+  const fimDaMedicao = Date.parse(r.dia + 'T23:59:59') / 1000; // idade no dia da medição, não hoje
+  r.dias = r.inicio ? Math.max(0, Math.floor((fimDaMedicao - r.inicio) / 86400)) : 0;
   r.situacao = r.dias >= 30 && r.ativos >= 50 ? 'validada' : r.dias < 30 && r.ativos >= 100 ? 'nova' : 'teste';
   r.hist = HIST[r.page_id] ?? [];
 }
 const TEM_HISTORICO = DADOS.some(r => r.cresc7d != null);
-const estado = { situacao: 'todas', nicho: '', busca: '', semRedes: true, chave: 'ativos', desc: true };
+const PASSO = 200; // linhas desenhadas por vez: com milhares de páginas, desenhar tudo trava a digitação
+const estado = { situacao: 'todas', nicho: '', busca: '', semRedes: true, chave: 'ativos', desc: true, limite: PASSO };
 
 // Linha de 2px com lavagem em degradê, ponto final com anel e dica ao passar o mouse.
 // eixos=true desenha grade, rótulos e mira vertical (gráfico grande do dossiê).
@@ -488,8 +505,15 @@ function render() {
   const visiveis = base.filter(r => estado.situacao === 'todas' || (estado.situacao === 'escalando' ? r.cresc7d > 0 : r.situacao === estado.situacao)).sort(comparar);
   const max = Math.max(1, ...visiveis.map(r => r.ativos));
   $('linhas').classList.toggle('anima', primeira && !REDUZIDO);
-  $('linhas').replaceChildren(...(visiveis.length ? visiveis.map((r, i) => linha(r, i, max))
-    : [el('tr', {}, el('td', { class: 'nada', colSpan: 7 }, DADOS.length ? 'Nenhuma oferta com esses filtros.' : 'Nenhuma coleta ainda. Rode npm run coletar e recarregue.'))]));
+  const faltam = visiveis.length - estado.limite;
+  $('linhas').replaceChildren(...(visiveis.length ? visiveis.slice(0, estado.limite).map((r, i) => linha(r, i, max))
+    : [el('tr', { class: 'fixa' }, el('td', { class: 'nada', colSpan: 7 }, DADOS.length ? 'Nenhuma oferta com esses filtros.' : 'Nenhuma coleta ainda. Rode npm run coletar e recarregue.'))]),
+    ...(faltam > 0 ? [el('tr', { class: 'fixa' }, el('td', { class: 'mais', colSpan: 7 }, el('button', { onclick: () => {
+      const antes = estado.limite;
+      estado.limite += PASSO;
+      render();
+      $('linhas').rows[antes]?.querySelector('button')?.focus(); // teclado continua de onde parou
+    } }, 'Mostrar mais ' + num(Math.min(PASSO, faltam)) + ' · faltam ' + num(faltam))))] : []));
   $('contagem').textContent = num(visiveis.length) + ' / ' + num(DADOS.length) + ' páginas';
   $('ordem').textContent = 'Ordem: ' + ORDEM[estado.chave] + (estado.desc ? ' ↓' : ' ↑');
 
@@ -509,16 +533,18 @@ if (ULTIMA) {
 } else { $('online').className = 'online off'; $('online').lastChild.textContent = 'Sem dados'; }
 for (const n of [...new Set(DADOS.map(r => r.nicho))].sort()) $('nicho').append(el('option', { value: n }, n));
 
-document.querySelectorAll('.kpi').forEach(b => b.onclick = () => { estado.situacao = b.dataset.status; render(); });
+const refiltrar = () => { estado.limite = PASSO; render(); };
+document.querySelectorAll('.kpi').forEach(b => b.onclick = () => { estado.situacao = b.dataset.status; refiltrar(); });
 document.querySelectorAll('th[data-k] button').forEach(b => b.onclick = () => {
   const k = b.parentElement.dataset.k;
   estado.desc = estado.chave === k ? !estado.desc : k !== 'page_name';
   estado.chave = k;
-  render();
+  refiltrar();
 });
-$('busca').oninput = e => { estado.busca = e.target.value; render(); };
-$('nicho').onchange = e => { estado.nicho = e.target.value; render(); };
-$('semRedes').onchange = e => { estado.semRedes = e.target.checked; render(); };
+let pausa;
+$('busca').oninput = e => { clearTimeout(pausa); pausa = setTimeout(() => { estado.busca = e.target.value; refiltrar(); }, 120); };
+$('nicho').onchange = e => { estado.nicho = e.target.value; refiltrar(); };
+$('semRedes').onchange = e => { estado.semRedes = e.target.checked; refiltrar(); };
 $('fechar').onclick = fechar;
 $('fundo').onclick = fechar;
 document.addEventListener('keydown', e => {
@@ -534,9 +560,23 @@ render();
 </script></body></html>`;
 
 http.createServer((req, res) => {
-  const json = JSON.stringify(dados()).replace(/</g, '\\u003c'); // texto de anúncio não fecha o <script>
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  res.end(HTML.replace('__DADOS__', () => json));
+  // Só atende pelo nome local: um site malicioso não consegue ler o painel via DNS rebinding.
+  if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.host ?? '')) return res.writeHead(403).end();
+  try {
+    const json = JSON.stringify(dados()).replace(/</g, '\\u003c'); // texto de anúncio não fecha o <script>
+    const nonce = randomBytes(16).toString('base64');
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'x-content-type-options': 'nosniff',
+      // Só o script desta página roda e imagens só vêm do CDN da Meta, mesmo que um texto de anúncio tente injetar algo.
+      'content-security-policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline' https://fonts.googleapis.com; `
+        + `font-src https://fonts.gstatic.com; img-src https://*.fbcdn.net data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+    });
+    res.end(HTML.replace('__NONCE__', nonce).replace('__DADOS__', () => json));
+  } catch (e) {
+    console.error(e);
+    res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }).end('Erro ao ler o banco: ' + e.message);
+  }
 }).on('error', e => {
   console.error(e.code === 'EADDRINUSE' ? `Porta ${PORTA} ocupada: o painel já está aberto em outro terminal? Feche ele e rode de novo.` : e.message);
   process.exit(1);
